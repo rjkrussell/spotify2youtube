@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:ytmusicapi.readthedocs.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(chmod +x:*)",
+      "Bash(python:*)",
+      "Bash(/Users/rjkrussell/projects/spotify2youtube/.venv/bin/python:*)",
+      "Bash(/Users/rjkrussell/projects/spotify2youtube/.venv/bin/pip show:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

@@ -134,6 +134,12 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# App credentials and state
+credentials.json
+state.json
+youtube_oauth.json
+.spotify_token_cache
+
 # Environments
 .env
 .envrc
