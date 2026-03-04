@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 from rapidfuzz import fuzz
 
 from src.models.library import Track, MatchingPreference, TransferStatus
+
+log = logging.getLogger(__name__)
 
 
 # Patterns to clean from search queries
@@ -42,6 +45,8 @@ class MatchResult:
     score: float = 0.0
     candidates: list[dict] | None = None
     error: str | None = None
+    context: str = ""
+    yt_playlist_id: str = ""
 
 
 class TrackMatcher:
@@ -60,7 +65,8 @@ class TrackMatcher:
         """Match a single track. Returns a MatchResult."""
         # Manual preference => skip to ambiguous
         if track.matching_pref == MatchingPreference.MANUAL:
-            candidates = self._search_with_rate_limit(f"{track.name} {track.artists[0]}")
+            first_artist = track.artists[0] if track.artists else ""
+            candidates = self._search_with_rate_limit(f"{track.name} {first_artist}")
             return MatchResult(
                 track=track,
                 status=TransferStatus.AMBIGUOUS,
@@ -70,9 +76,15 @@ class TrackMatcher:
         threshold = self.EXACT_THRESHOLD if track.matching_pref == MatchingPreference.STRICT else self.FUZZY_THRESHOLD
 
         # Step 1: Exact search
-        query = f"{track.name} {track.artists[0]}"
+        first_artist = track.artists[0] if track.artists else ""
+        query = f"{track.name} {first_artist}"
         results = self._search_with_rate_limit(query)
         best, score = self._score_results(track, results)
+
+        log.info(
+            "match %r q=%r results=%d best_score=%.0f threshold=%d",
+            track.name, query, len(results), score, threshold,
+        )
 
         if best and score >= self.EXACT_THRESHOLD:
             return MatchResult(
@@ -85,7 +97,7 @@ class TrackMatcher:
         # Step 2: Fuzzy search (clean query)
         if track.matching_pref != MatchingPreference.STRICT:
             cleaned_name = clean_query(track.name)
-            cleaned_artist = clean_query(track.artists[0]) if track.artists else ""
+            cleaned_artist = clean_query(first_artist) if first_artist else ""
             fuzzy_query = f"{cleaned_name} {cleaned_artist}"
 
             if fuzzy_query != query:
@@ -95,6 +107,7 @@ class TrackMatcher:
                 if best2 and score2 > score:
                     best, score = best2, score2
                     results = results2
+                    log.info("  fuzzy improved: q=%r score=%.0f", fuzzy_query, score)
 
         if best and score >= threshold:
             return MatchResult(
@@ -105,6 +118,10 @@ class TrackMatcher:
             )
 
         # Step 3: Queue as ambiguous
+        log.warning(
+            "  AMBIGUOUS %r best_score=%.0f < threshold=%d (%d candidates)",
+            track.name, score, threshold, len(results),
+        )
         return MatchResult(
             track=track,
             status=TransferStatus.AMBIGUOUS,
@@ -142,7 +159,7 @@ class TrackMatcher:
         )
 
         # Duration similarity (0-100 scale)
-        result_duration = result.get("duration_seconds", 0) * 1000
+        result_duration = (result.get("duration_seconds") or 0) * 1000
         if result_duration and track.duration_ms:
             diff_ms = abs(track.duration_ms - result_duration)
             # Within 5 seconds = 100, within 30s = ~50, beyond = low

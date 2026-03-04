@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog
 from typing import TYPE_CHECKING
 
-from src.app import SPOTIFY_GREEN, YOUTUBE_RED, get_colors
+from src.app import SPOTIFY_GREEN, YOUTUBE_RED, YT_LABEL, get_colors, GradientBar
 from src.models.library import TransferStatus
 
 if TYPE_CHECKING:
@@ -34,23 +34,28 @@ class ReviewScreen(tk.Frame):
                  foreground=SPOTIFY_GREEN).pack(side="left")
         tk.Label(title_frame, text=" Spotify", font=("TkDefaultFont", 16, "bold"),
                  foreground=SPOTIFY_GREEN).pack(side="left")
-        tk.Label(title_frame, text="2", font=("TkDefaultFont", 16, "bold"),
+        tk.Label(title_frame, text=" \u2192 ", font=("TkDefaultFont", 16, "bold"),
                  foreground=c["separator"]).pack(side="left")
-        tk.Label(title_frame, text="YouTube", font=("TkDefaultFont", 16, "bold"),
+        tk.Label(title_frame, text=YT_LABEL, font=("TkDefaultFont", 16, "bold"),
                  foreground=YOUTUBE_RED).pack(side="left")
         dry_label = " (Dry Run)" if self.dry_run else ""
         tk.Label(title_frame, text=f"  \u2014  Transfer Results{dry_label}",
                  font=("TkDefaultFont", 14), foreground=c["fg_muted"]).pack(side="left")
+
+        GradientBar(self, height=4).pack(fill="x", padx=20, pady=(0, 5))
 
         # Summary
         summary_frame = tk.Frame(self)
         summary_frame.pack(fill="x", padx=20, pady=10)
 
         results = self.progress.results
+        artist_results = self.progress.artist_results
         success_count = sum(1 for r in results if r.status == TransferStatus.SUCCESS)
         failed_count = len(self.progress.failed_tracks)
         ambiguous_count = len(self.progress.ambiguous_tracks)
         skipped_count = sum(1 for r in results if r.status == TransferStatus.SKIPPED)
+        artists_ok = sum(1 for r in artist_results if r.status == TransferStatus.SUCCESS)
+        artists_fail = sum(1 for r in artist_results if r.status != TransferStatus.SUCCESS)
 
         summary_data = [
             ("Matched", success_count, c["success"]),
@@ -58,6 +63,9 @@ class ReviewScreen(tk.Frame):
             ("Ambiguous", ambiguous_count, c["warning"]),
             ("Skipped", skipped_count, c["summary_skip"]),
         ]
+        if artist_results:
+            summary_data.append(("Artists \u2713", artists_ok, c["success"]))
+            summary_data.append(("Artists \u2717", artists_fail, c["summary_fail"]))
 
         for i, (label, count, color) in enumerate(summary_data):
             tk.Label(summary_frame, text=f"{label}: {count}", foreground=color,
@@ -107,7 +115,7 @@ class ReviewScreen(tk.Frame):
         self.results_tree.tag_configure("ambiguous", foreground=c["warning"])
         self.results_tree.tag_configure("skipped", foreground=c["summary_skip"])
 
-        # Populate results
+        # Populate track results
         self._result_map: dict[str, object] = {}
         for result in results:
             tag = result.status.value
@@ -119,6 +127,18 @@ class ReviewScreen(tk.Frame):
                 result.error or "",
             ), tags=(tag,))
             self._result_map[item_id] = result
+
+        # Populate artist results
+        for ar in artist_results:
+            tag = ar.status.value
+            matched_to = f"\u2192 {ar.channel_title}" if ar.channel_title else ""
+            self.results_tree.insert("", "end", values=(
+                f"\u266a {ar.artist.name}",
+                "Artist",
+                ar.status.value.title(),
+                matched_to,
+                ar.error or "",
+            ), tags=(tag,))
 
         self.results_tree.bind("<<TreeviewSelect>>", self._on_select_result)
 
@@ -170,7 +190,7 @@ class ReviewScreen(tk.Frame):
         self.resolution_info.config(
             text=f"Resolve: {result.track.name} — {', '.join(result.track.artists)}"
         )
-        self.search_var.set(f"{result.track.name} {result.track.artists[0]}")
+        self.search_var.set(f"{result.track.name} {result.track.artists[0] if result.track.artists else ''}")
         self._show_candidates(result.candidates or [])
 
     def _show_candidates(self, candidates: list[dict]):
@@ -191,29 +211,44 @@ class ReviewScreen(tk.Frame):
             duration = candidate.get("duration", "")
             video_id = candidate.get("videoId", "")
 
-            tk.Label(row, text=f"{i+1}. {title} — {artists}", anchor="w").pack(side="left", fill="x", expand=True)
+            ttk.Button(row, text="Select", command=lambda vid=video_id, c=candidate: self._select_candidate(vid, c)).pack(side="left", padx=(0, 5))
+            tk.Label(row, text=f"{i+1}. {title} — {artists}", anchor="w").pack(side="left")
             if duration:
                 tk.Label(row, text=duration, foreground="gray").pack(side="left", padx=5)
-            ttk.Button(row, text="Select", command=lambda vid=video_id, c=candidate: self._select_candidate(vid, c)).pack(side="right")
 
     def _select_candidate(self, video_id: str, candidate: dict):
-        """Accept a candidate match."""
+        """Accept a candidate match and transfer it to YouTube."""
         if not hasattr(self, "_current_result"):
             return
 
         result = self._current_result
+        ctx = f"[{result.context}] " if result.context else ""
+        track_label = f"{result.track.name} — {', '.join(result.track.artists)}"
+        match_title = candidate.get("title", video_id)
+
         result.track.yt_video_id = video_id
         result.track.transfer_status = TransferStatus.SUCCESS
         result.track.yt_candidates = []
 
-        # Write to YT Music if not dry run
+        error_msg = None
         if not self.dry_run:
             try:
                 from src.services.youtube_service import YouTubeService
                 yt_svc = YouTubeService(self.app.credentials_manager.credentials)
-                yt_svc.rate_song(video_id, "LIKE")
-            except Exception:
-                pass
+
+                if result.yt_playlist_id:
+                    # Playlist track: add to the playlist
+                    yt_svc.add_playlist_items(result.yt_playlist_id, [video_id])
+                    self.app.log(f"{ctx}Transferred to playlist (videoId={video_id}): {track_label} -> {match_title}", "success")
+                else:
+                    # Liked track or album track: like the video
+                    yt_svc.rate_song(video_id, "LIKE")
+                    self.app.log(f"{ctx}Liked on YouTube (videoId={video_id}): {track_label} -> {match_title}", "success")
+            except Exception as e:
+                error_msg = str(e)
+                self.app.log(f"{ctx}Resolved match but transfer failed: {track_label} ({e})", "error")
+        else:
+            self.app.log(f"{ctx}Resolved (dry run): {track_label} -> {match_title}", "success")
 
         self.app.state_manager.save()
 
@@ -223,9 +258,13 @@ class ReviewScreen(tk.Frame):
             ", ".join(result.track.artists),
             "Success",
             "",
+            error_msg or "",
         ), tags=("success",))
 
-        self.resolution_info.config(text=f"Resolved: {result.track.name} -> {candidate.get('title', video_id)}")
+        status_text = f"Resolved: {track_label} -> {match_title}"
+        if error_msg:
+            status_text += f" (transfer error: {error_msg})"
+        self.resolution_info.config(text=status_text)
         for w in self.candidates_frame.winfo_children():
             w.destroy()
 
@@ -240,14 +279,19 @@ class ReviewScreen(tk.Frame):
             yt_svc = YouTubeService(self.app.credentials_manager.credentials)
             candidates = yt_svc.search_tracks(query, limit=5)
             self._show_candidates(candidates)
+            self.app.log(f"Manual search: \"{query}\" -> {len(candidates)} results")
         except Exception as e:
             self.resolution_info.config(text=f"Search error: {e}")
+            self.app.log(f"Manual search failed: {e}", "error")
 
     def _skip_current(self):
         """Skip the currently selected ambiguous track."""
         if not hasattr(self, "_current_result"):
             return
         result = self._current_result
+        ctx = f"[{result.context}] " if result.context else ""
+        track_label = f"{result.track.name} — {', '.join(result.track.artists)}"
+
         result.track.transfer_status = TransferStatus.SKIPPED
         self.app.state_manager.save()
 
@@ -256,9 +300,11 @@ class ReviewScreen(tk.Frame):
             ", ".join(result.track.artists),
             "Skipped",
             "",
+            "",
         ), tags=("skipped",))
 
         self.resolution_info.config(text=f"Skipped: {result.track.name}")
+        self.app.log(f"{ctx}Skipped: {track_label}")
         for w in self.candidates_frame.winfo_children():
             w.destroy()
 
@@ -284,6 +330,16 @@ class ReviewScreen(tk.Frame):
                     f"{result.score:.0f}" if result.score else "",
                     result.track.yt_video_id or "",
                     result.error or "",
+                ])
+            for ar in self.progress.artist_results:
+                writer.writerow([
+                    ar.artist.name,
+                    "Artist",
+                    "",
+                    ar.status.value,
+                    ar.channel_title or "",
+                    "",
+                    ar.error or "",
                 ])
 
     def _go_back(self):

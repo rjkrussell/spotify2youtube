@@ -35,6 +35,8 @@ THEME_COLORS = {
         "action": "#6baaff",
         "summary_fail": "#ff6b6b",
         "summary_skip": "#777777",
+        "grad_start": "#1DB954",
+        "grad_end": "#FF0000",
     },
     "light": {
         "bg": "#ffffff",
@@ -52,8 +54,13 @@ THEME_COLORS = {
         "action": "#1565c0",
         "summary_fail": "#d32f2f",
         "summary_skip": "#999999",
+        "grad_start": "#1DB954",
+        "grad_end": "#FF0000",
     },
 }
+
+MOCK_MODE = os.environ.get("YOUTUBE_MOCK") == "1"
+YT_LABEL = "YouTube Music [mock]" if MOCK_MODE else "YouTube Music"
 
 PREFS_PATH = os.path.join(DATA_DIR, "preferences.json")
 
@@ -61,6 +68,54 @@ PREFS_PATH = os.path.join(DATA_DIR, "preferences.json")
 def get_colors() -> dict[str, str]:
     """Return the color palette for the current theme."""
     return THEME_COLORS.get(sv_ttk.get_theme(), THEME_COLORS["dark"])
+
+
+class GradientBar(tk.Canvas):
+    """Thin horizontal gradient strip from Spotify green to YouTube blue."""
+
+    BANDS = 80
+
+    def __init__(self, parent, height=4, **kwargs):
+        kwargs.setdefault("highlightthickness", 0)
+        kwargs.setdefault("borderwidth", 0)
+        kwargs.setdefault("height", height)
+        super().__init__(parent, **kwargs)
+        self._drawn_w = 0
+        self.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, event=None):
+        w = self.winfo_width()
+        if w == self._drawn_w or w < 2:
+            return
+        self._drawn_w = w
+        self._draw(w)
+
+    def _draw(self, width):
+        self.delete("grad")
+        h = self.winfo_height()
+        c = get_colors()
+        r1, g1, b1 = _hex_to_rgb(c["grad_start"])
+        r2, g2, b2 = _hex_to_rgb(c["grad_end"])
+        band_w = max(width / self.BANDS, 1)
+        for i in range(self.BANDS):
+            t = i / max(self.BANDS - 1, 1)
+            r = int(r1 + (r2 - r1) * t)
+            g = int(g1 + (g2 - g1) * t)
+            b = int(b1 + (b2 - b1) * t)
+            x = int(i * band_w)
+            self.create_rectangle(
+                x, 0, int(x + band_w) + 1, h,
+                fill=f"#{r:02x}{g:02x}{b:02x}", outline="", tags="grad",
+            )
+
+    def refresh(self):
+        """Redraw with current theme colors."""
+        self._drawn_w = 0
+        self._on_configure()
+
+
+def _hex_to_rgb(h: str) -> tuple[int, int, int]:
+    return int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)
 
 
 def _fix_paned_cursor(paned: ttk.PanedWindow):
@@ -91,7 +146,7 @@ def _fix_paned_cursor(paned: ttk.PanedWindow):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("\u266b Spotify2YouTube")
+        self.title(f"\u266b Spotify \u2192 {YT_LABEL}")
         self.geometry("1100x750")
         self.minsize(900, 600)
 

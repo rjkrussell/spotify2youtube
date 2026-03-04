@@ -19,8 +19,13 @@ from ytmusicapi.auth.oauth import OAuthCredentials
 from src.models.credentials import Credentials, DATA_DIR
 
 OAUTH_PATH = os.path.join(DATA_DIR, "youtube_oauth.json")
-API_BASE = "https://www.googleapis.com/youtube/v3"
-TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+if os.environ.get("YOUTUBE_MOCK") == "1":
+    API_BASE = os.environ.get("YOUTUBE_API_BASE", "http://127.0.0.1:8444/youtube/v3")
+    TOKEN_URL = os.environ.get("YOUTUBE_TOKEN_URL", "http://127.0.0.1:8444/oauth2/token")
+else:
+    API_BASE = os.environ.get("YOUTUBE_API_BASE", "https://www.googleapis.com/youtube/v3")
+    TOKEN_URL = os.environ.get("YOUTUBE_TOKEN_URL", "https://oauth2.googleapis.com/token")
 
 
 class YouTubeService:
@@ -178,13 +183,20 @@ class YouTubeService:
         return results
 
     def get_library_playlists(self) -> list[dict]:
-        """Get the user's playlists."""
+        """Get the user's playlists. Returns normalized dicts with 'playlistId' and 'title'."""
         data = self._api_get("playlists", {
             "part": "snippet,contentDetails",
             "mine": "true",
             "maxResults": 50,
         })
-        return data.get("items", [])
+        results = []
+        for item in data.get("items", []):
+            results.append({
+                "playlistId": item["id"],
+                "title": item.get("snippet", {}).get("title", ""),
+                "itemCount": item.get("contentDetails", {}).get("itemCount", 0),
+            })
+        return results
 
     def create_playlist(self, title: str, description: str = "", video_ids: list[str] | None = None) -> str:
         """Create a playlist. Returns the playlist ID."""
@@ -223,6 +235,22 @@ class YouTubeService:
         )
         resp.raise_for_status()
         return {"status": "ok"}
+
+    def search_channels(self, query: str, limit: int = 1) -> list[dict]:
+        """Search for YouTube channels by name."""
+        data = self._api_get("search", {
+            "part": "snippet",
+            "q": query,
+            "type": "channel",
+            "maxResults": limit,
+        })
+        results = []
+        for item in data.get("items", []):
+            results.append({
+                "channelId": item["snippet"]["channelId"],
+                "title": item["snippet"]["title"],
+            })
+        return results
 
     def subscribe_artist(self, channel_id: str) -> dict:
         """Subscribe to a YouTube channel."""

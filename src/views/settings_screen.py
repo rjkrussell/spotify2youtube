@@ -9,7 +9,7 @@ import webbrowser
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from src.app import SPOTIFY_GREEN, YOUTUBE_RED, get_colors
+from src.app import SPOTIFY_GREEN, YOUTUBE_RED, YT_LABEL, get_colors, GradientBar
 
 if TYPE_CHECKING:
     from src.app import App
@@ -27,18 +27,20 @@ class SettingsScreen(tk.Frame):
 
         # Branded title
         title_frame = tk.Frame(self)
-        title_frame.pack(pady=(20, 10))
+        title_frame.pack(pady=(20, 5))
         tk.Label(title_frame, text="\u266b", font=("TkDefaultFont", 18),
                  foreground=SPOTIFY_GREEN).pack(side="left")
         tk.Label(title_frame, text=" Spotify", font=("TkDefaultFont", 16, "bold"),
                  foreground=SPOTIFY_GREEN).pack(side="left")
         c = get_colors()
-        tk.Label(title_frame, text="2", font=("TkDefaultFont", 16, "bold"),
+        tk.Label(title_frame, text=" \u2192 ", font=("TkDefaultFont", 16, "bold"),
                  foreground=c["separator"]).pack(side="left")
-        tk.Label(title_frame, text="YouTube", font=("TkDefaultFont", 16, "bold"),
+        tk.Label(title_frame, text=YT_LABEL, font=("TkDefaultFont", 16, "bold"),
                  foreground=YOUTUBE_RED).pack(side="left")
         tk.Label(title_frame, text="  \u2014  Settings", font=("TkDefaultFont", 14),
                  foreground=c["fg_muted"]).pack(side="left")
+
+        GradientBar(self, height=4).pack(fill="x", padx=40, pady=(0, 5))
 
         form = tk.Frame(self)
         form.pack(fill="both", expand=True, padx=40, pady=10)
@@ -107,7 +109,7 @@ class SettingsScreen(tk.Frame):
         ])
 
         # --- YouTube Music section ---
-        yt_frame = ttk.LabelFrame(form, text="\u25b6 YouTube Music", padding=10)
+        yt_frame = ttk.LabelFrame(form, text=f"\u25b6 {YT_LABEL}", padding=10)
         yt_frame.pack(fill="x", pady=(0, 15))
 
         # Step 1: Enter credentials

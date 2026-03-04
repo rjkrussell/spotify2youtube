@@ -183,7 +183,7 @@ class DetailPanel(tk.Frame):
         tk.Label(header, text=track.name, font=("TkDefaultFont", 11)).pack(anchor="w")
         tk.Label(header, text=f"Artists: {', '.join(track.artists)}").pack(anchor="w")
         tk.Label(header, text=f"Album: {track.album}").pack(anchor="w")
-        mins, secs = divmod(track.duration_ms // 1000, 60)
+        mins, secs = divmod((track.duration_ms or 0) // 1000, 60)
         tk.Label(header, text=f"Duration: {mins}:{secs:02d}").pack(anchor="w")
 
         config = tk.Frame(self)

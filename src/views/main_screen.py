@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from src.app import SPOTIFY_GREEN, YOUTUBE_RED, get_colors, _fix_paned_cursor
+from src.app import SPOTIFY_GREEN, YOUTUBE_RED, YT_LABEL, get_colors, GradientBar, _fix_paned_cursor
 from src.models.library import (
     Track, Playlist, Album, Artist, SpotifyLibrary,
     MatchingPreference, TransferStatus,
@@ -53,11 +53,15 @@ class MainScreen(tk.Frame):
         tk.Label(title_frame, text=" Spotify", font=("TkDefaultFont", 16, "bold"),
                  foreground=SPOTIFY_GREEN).pack(side="left")
         c = get_colors()
-        self._title_sep = tk.Label(title_frame, text="2", font=("TkDefaultFont", 16, "bold"),
+        self._title_sep = tk.Label(title_frame, text=" \u2192 ", font=("TkDefaultFont", 16, "bold"),
                                    foreground=c["separator"])
         self._title_sep.pack(side="left")
-        tk.Label(title_frame, text="YouTube", font=("TkDefaultFont", 16, "bold"),
+        tk.Label(title_frame, text=YT_LABEL, font=("TkDefaultFont", 16, "bold"),
                  foreground=YOUTUBE_RED).pack(side="left")
+
+        # Gradient accent bar
+        self._gradient = GradientBar(self, height=4)
+        self._gradient.pack(fill="x")
 
         # Guide panel (hidden by default)
         self._guide_frame = tk.Frame(self)
@@ -68,7 +72,7 @@ class MainScreen(tk.Frame):
                                    height=18, background=c["guide_bg"], foreground=c["guide_fg"])
         self._guide_text.pack(fill="x", padx=10, pady=(0, 5))
         guide_content = (
-            "How to use Spotify2YouTube\n"
+            "How to use Spotify \u2192 YouTube Music\n"
             "\n"
             "1. Fetch your Spotify library\n"
             "   Click \"Refresh Library\" and choose which categories to sync\n"
@@ -238,6 +242,7 @@ class MainScreen(tk.Frame):
         if has_data:
             self._show_paned_ui()
             self._populate_tree(lib)
+            self.bottom_bar.update_selected_count()
         elif not self._fetch_in_progress:
             self._show_fetch_panel_ui()
         # If fetch is in progress, leave the current UI (progress bar) alone.
@@ -385,7 +390,7 @@ class MainScreen(tk.Frame):
             spotify_id=raw["id"],
             name=raw["name"],
             artists=[a["name"] for a in raw["artists"] if a.get("name")],
-            album=raw.get("album", {}).get("name", ""),
+            album=(raw.get("album") or {}).get("name", ""),
             duration_ms=raw["duration_ms"],
         )
 
@@ -420,6 +425,7 @@ class MainScreen(tk.Frame):
         self.bottom_bar.status_label.config(text=summary)
         self.app.log(summary, "success")
         self._populate_tree(library)
+        self.bottom_bar.update_selected_count()
 
     def _on_fetch_error(self, error: str):
         if self._cancel_event.is_set():
@@ -566,22 +572,49 @@ class MainScreen(tk.Frame):
         return ""
 
     def _on_tree_select(self, event):
-        """Handle tree selection — show detail panel for selected item."""
+        """Handle tree selection — show detail panel for selected item(s)."""
         selection = self.tree.selection()
         if not selection:
             return
-        item_id = selection[0]
-        obj = self.item_map.get(item_id)
-        if obj is None:
+
+        # Single selection — show that item directly
+        if len(selection) == 1:
+            item_id = selection[0]
+            obj = self.item_map.get(item_id)
+            if obj is None:
+                return
+            action = self._get_transfer_action(item_id)
+            self.detail_panel.show_item(item_id, obj, transfer_action=action)
             return
 
-        action = self._get_transfer_action(item_id)
-        self.detail_panel.show_item(item_id, obj, transfer_action=action)
+        # Multi-selection — gather objects and show as a group if same type
+        objects = []
+        for item_id in selection:
+            obj = self.item_map.get(item_id)
+            if obj is not None and not isinstance(obj, list):
+                objects.append(obj)
+
+        if not objects:
+            return
+
+        # Check if all objects are the same type
+        first_type = type(objects[0])
+        if all(isinstance(o, first_type) for o in objects):
+            action = self._get_transfer_action(selection[0])
+            self.detail_panel.show_item(selection[0], objects, transfer_action=action)
+        else:
+            # Mixed types — just show the first item
+            item_id = selection[0]
+            obj = self.item_map.get(item_id)
+            if obj is not None:
+                action = self._get_transfer_action(item_id)
+                self.detail_panel.show_item(item_id, obj, transfer_action=action)
 
     def _on_check_changed(self, event):
         """Sync checkbox states back to model objects."""
         self._sync_check_states()
         self.app.state_manager.save()
+        self.bottom_bar.update_selected_count()
 
     def _sync_check_states(self):
         """Walk the tree and update model `selected` fields.
