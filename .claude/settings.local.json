@@ -8,7 +8,8 @@
       "Bash(python:*)",
       "Bash(/Users/rjkrussell/projects/spotify2youtube/.venv/bin/python:*)",
       "Bash(/Users/rjkrussell/projects/spotify2youtube/.venv/bin/pip show:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(ls:*)"
     ]
   }
 }

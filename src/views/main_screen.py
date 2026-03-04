@@ -34,14 +34,64 @@ class MainScreen(tk.Frame):
 
     def _build_ui(self):
         # Top bar
-        top = tk.Frame(self)
-        top.pack(fill="x", padx=5, pady=5)
+        self._top_bar = tk.Frame(self)
+        self._top_bar.pack(fill="x", padx=5, pady=5)
+        top = self._top_bar
 
         tk.Label(top, text="spotify2youtube.py", font=("TkDefaultFont", 14, "bold")).pack(side="left")
 
         ttk.Button(top, text="Settings", command=lambda: self.app.show_screen("settings")).pack(side="right")
         self._refresh_btn = ttk.Button(top, text="Refresh Library", command=self._show_fetch_panel)
         self._refresh_btn.pack(side="right", padx=5)
+        ttk.Button(top, text="Guide", command=self._toggle_guide).pack(side="right", padx=5)
+
+        # Guide panel (hidden by default)
+        self._guide_frame = tk.Frame(self)
+        self._guide_visible = False
+        guide_text = tk.Text(self._guide_frame, wrap="word", borderwidth=1, relief="solid",
+                             highlightthickness=0, padx=10, pady=10, cursor="arrow",
+                             height=20)
+        guide_text.pack(fill="x", padx=5, pady=(0, 5))
+        guide_content = (
+            "How to use spotify2youtube\n"
+            "\n"
+            "1. Fetch your Spotify library\n"
+            "   Click \"Refresh Library\" and choose which categories to sync\n"
+            "   (Playlists, Liked Songs, Saved Albums, Followed Artists), then\n"
+            "   click \"Go\". The app fetches your library in the background.\n"
+            "\n"
+            "2. Select what to transfer\n"
+            "   Your library appears as a tree with checkboxes. Check or uncheck\n"
+            "   at any level \u2014 toggling a parent toggles all its children.\n"
+            "   Click an item to see a detail panel on the right where you can:\n"
+            "     \u2022 Rename a playlist for YouTube\n"
+            "     \u2022 Set matching preference (Fuzzy / Strict / Manual)\n"
+            "     \u2022 Merge into an existing YouTube playlist\n"
+            "\n"
+            "3. Transfer\n"
+            "   Click \"Transfer Selected\" in the bottom bar. The app searches\n"
+            "   YouTube for each track, scores matches, and:\n"
+            "     \u2022 Playlists \u2192 creates YouTube playlists with matched tracks\n"
+            "     \u2022 Liked Songs \u2192 likes the matched videos on YouTube\n"
+            "     \u2022 Albums \u2192 likes each track on YouTube\n"
+            "     \u2022 Artists \u2192 subscribes to their YouTube channel\n"
+            "\n"
+            "4. Review results\n"
+            "   After transfer, a results screen shows what matched, failed, or\n"
+            "   was ambiguous. For ambiguous tracks you can search YouTube\n"
+            "   manually and pick the right match. You can export results to CSV.\n"
+            "\n"
+            "5. Re-fetch / retry\n"
+            "   Click \"Refresh Library\" to re-fetch specific categories without\n"
+            "   losing other data. Previously transferred tracks are skipped on\n"
+            "   re-transfer."
+        )
+        guide_text.insert("1.0", guide_content)
+        guide_text.tag_add("title", "1.0", "1.end")
+        guide_text.tag_configure("title", font=("TkDefaultFont", 12, "bold"))
+        guide_text.configure(state="disabled")
+        guide_scroll = ttk.Scrollbar(self._guide_frame, orient="vertical", command=guide_text.yview)
+        guide_text.configure(yscrollcommand=guide_scroll.set)
 
         # --- Inline fetch panel (shown when no data) ---
         from src.views.fetch_dialog import FetchPanel
@@ -84,6 +134,14 @@ class MainScreen(tk.Frame):
     # ------------------------------------------------------------------
     # Show / hide helpers
     # ------------------------------------------------------------------
+
+    def _toggle_guide(self):
+        if self._guide_visible:
+            self._guide_frame.pack_forget()
+            self._guide_visible = False
+        else:
+            self._guide_frame.pack(fill="x", padx=5, after=self._top_bar)
+            self._guide_visible = True
 
     def _show_fetch_panel_ui(self):
         """Show the inline fetch panel, hide the tree/detail paned area."""
@@ -210,7 +268,7 @@ class MainScreen(tk.Frame):
                     tracks.append(Track(
                         spotify_id=at["id"],
                         name=at["name"],
-                        artists=[a["name"] for a in at["artists"]],
+                        artists=[a["name"] for a in at["artists"] if a.get("name")],
                         album=ra["name"],
                         duration_ms=at["duration_ms"],
                     ))
@@ -253,7 +311,7 @@ class MainScreen(tk.Frame):
         return Track(
             spotify_id=raw["id"],
             name=raw["name"],
-            artists=[a["name"] for a in raw["artists"]],
+            artists=[a["name"] for a in raw["artists"] if a.get("name")],
             album=raw.get("album", {}).get("name", ""),
             duration_ms=raw["duration_ms"],
         )
@@ -309,7 +367,7 @@ class MainScreen(tk.Frame):
 
         # Playlists
         if library.playlists:
-            cat_id = self.tree.insert_item(text="Playlists", checked=True)
+            cat_id = self.tree.insert_item(text="Playlists", checked=False)
             self.category_ids["playlists"] = cat_id
             self.item_map[cat_id] = library.playlists
             for pl in library.playlists:
@@ -326,7 +384,7 @@ class MainScreen(tk.Frame):
 
         # Liked Songs
         if library.liked_tracks:
-            cat_id = self.tree.insert_item(text=f"Liked Songs ({len(library.liked_tracks)})", checked=True)
+            cat_id = self.tree.insert_item(text=f"Liked Songs ({len(library.liked_tracks)})", checked=False)
             self.category_ids["liked"] = cat_id
             self.item_map[cat_id] = library.liked_tracks
             for track in library.liked_tracks:
@@ -339,7 +397,7 @@ class MainScreen(tk.Frame):
 
         # Albums
         if library.albums:
-            cat_id = self.tree.insert_item(text="Albums", checked=True)
+            cat_id = self.tree.insert_item(text="Albums", checked=False)
             self.category_ids["albums"] = cat_id
             self.item_map[cat_id] = library.albums
             for album in library.albums:
@@ -357,7 +415,7 @@ class MainScreen(tk.Frame):
 
         # Artists
         if library.artists:
-            cat_id = self.tree.insert_item(text="Artists", checked=True)
+            cat_id = self.tree.insert_item(text="Artists", checked=False)
             self.category_ids["artists"] = cat_id
             self.item_map[cat_id] = library.artists
             for artist in library.artists:
@@ -365,6 +423,27 @@ class MainScreen(tk.Frame):
                                               text=f"{artist.name}",
                                               checked=artist.selected)
                 self.item_map[ar_id] = artist
+
+        # Cascade up from leaves so parent states reflect children
+        self._fix_parent_states()
+
+    def _fix_parent_states(self):
+        """Walk the tree bottom-up so parent checkboxes match their children."""
+        def _fix(item: str):
+            children = self.tree.get_children(item)
+            for child in children:
+                _fix(child)
+            if children:
+                states = {self.tree.get_state(c) for c in children}
+                if states == {"checked"}:
+                    self.tree._set_state(item, "checked")
+                elif states == {"unchecked"}:
+                    self.tree._set_state(item, "unchecked")
+                else:
+                    self.tree._set_state(item, "tristate")
+
+        for root_item in self.tree.get_children():
+            _fix(root_item)
 
     def _on_tree_select(self, event):
         """Handle tree selection — show detail panel for selected item."""
@@ -384,11 +463,18 @@ class MainScreen(tk.Frame):
         self.app.state_manager.save()
 
     def _sync_check_states(self):
-        """Walk the tree and update model `selected` fields."""
+        """Walk the tree and update model `selected` fields.
+
+        For containers (Playlist, Album) tristate counts as selected
+        because they have some checked tracks inside that should transfer.
+        """
         for item_id, obj in self.item_map.items():
-            checked = self.tree.is_checked(item_id)
-            if isinstance(obj, (Track, Playlist, Album, Artist)):
-                obj.selected = checked
+            state = self.tree.get_state(item_id)
+            if isinstance(obj, (Playlist, Album)):
+                # Include in transfer if checked OR tristate (has some selected tracks)
+                obj.selected = state in ("checked", "tristate")
+            elif isinstance(obj, (Track, Artist)):
+                obj.selected = state == "checked"
 
     def get_selected_items(self) -> dict:
         """Return selected library items grouped by category."""

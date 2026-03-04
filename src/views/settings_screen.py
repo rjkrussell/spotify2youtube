@@ -84,13 +84,13 @@ class SettingsScreen(tk.Frame):
             (" and log in.\n", None),
             ('2. Click "Create App".\n', None),
             ("3. Give it any name/description. For Redirect URI enter:\n"
-             "   http://localhost:8888/callback\n", None),
+             "   http://127.0.0.1:8888/callback\n", None),
             ('4. Under "Which API/SDKs are you planning to use?" select\n'
              '   "Web API", then save.\n', None),
             ("5. Open the app's settings and copy the Client ID and\n"
              "   Client Secret into the fields above.\n", None),
             ("6. Set the Redirect URI above to the same value you used\n"
-             "   in the dashboard (e.g. http://localhost:8888/callback).", None),
+             "   in the dashboard (e.g. http://127.0.0.1:8888/callback).", None),
         ])
 
         # --- YouTube Music section ---

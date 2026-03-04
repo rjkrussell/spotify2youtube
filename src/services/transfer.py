@@ -85,6 +85,8 @@ class TransferController:
         """Main transfer loop (runs in background thread)."""
         try:
             completed = 0
+            consecutive_failures = 0
+            MAX_CONSECUTIVE_FAILURES = 5
 
             # Transfer playlists
             for pl in selected.get("playlists", []):
@@ -108,8 +110,8 @@ class TransferController:
 
                     try:
                         result = self.matcher.match_track(track)
-                    except Exception:
-                        result = MatchResult(track=track, status=TransferStatus.FAILED)
+                    except Exception as e:
+                        result = MatchResult(track=track, status=TransferStatus.FAILED, error=str(e))
                     self._queue.put({"type": "result", "result": result})
 
                     if result.status == TransferStatus.SUCCESS and result.best_match:
@@ -117,17 +119,25 @@ class TransferController:
                         track.yt_video_id = video_id
                         track.transfer_status = TransferStatus.SUCCESS
                         matched_ids.append(video_id)
+                        consecutive_failures = 0
                     elif result.status == TransferStatus.AMBIGUOUS:
                         track.transfer_status = TransferStatus.AMBIGUOUS
                         track.yt_candidates = result.candidates or []
                         self.progress.ambiguous_tracks.append(result)
+                        consecutive_failures = 0
                     else:
                         track.transfer_status = TransferStatus.FAILED
                         self.progress.failed_tracks.append(track)
+                        consecutive_failures += 1
 
                     completed += 1
                     self._queue.put({"type": "progress", "completed": completed, "item": f"Track: {track.name}"})
                     self.state_manager.save()
+
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        err = result.error or "Unknown error"
+                        self._queue.put({"type": "error", "error": f"Stopped: {consecutive_failures} consecutive failures ({err})"})
+                        return
 
                 # Create/merge playlist on YT
                 if not self.dry_run and matched_ids:
@@ -158,14 +168,15 @@ class TransferController:
 
                 try:
                     result = self.matcher.match_track(track)
-                except Exception:
-                    result = MatchResult(track=track, status=TransferStatus.FAILED)
+                except Exception as e:
+                    result = MatchResult(track=track, status=TransferStatus.FAILED, error=str(e))
                 self._queue.put({"type": "result", "result": result})
 
                 if result.status == TransferStatus.SUCCESS and result.best_match:
                     video_id = result.best_match.get("videoId", "")
                     track.yt_video_id = video_id
                     track.transfer_status = TransferStatus.SUCCESS
+                    consecutive_failures = 0
                     if not self.dry_run:
                         try:
                             self.yt.rate_song(video_id, "LIKE")
@@ -175,13 +186,20 @@ class TransferController:
                     track.transfer_status = TransferStatus.AMBIGUOUS
                     track.yt_candidates = result.candidates or []
                     self.progress.ambiguous_tracks.append(result)
+                    consecutive_failures = 0
                 else:
                     track.transfer_status = TransferStatus.FAILED
                     self.progress.failed_tracks.append(track)
+                    consecutive_failures += 1
 
                 completed += 1
                 self._queue.put({"type": "progress", "completed": completed, "item": f"Liked: {track.name}"})
                 self.state_manager.save()
+
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    err = result.error or "Unknown error"
+                    self._queue.put({"type": "error", "error": f"Stopped: {consecutive_failures} consecutive failures ({err})"})
+                    return
 
             # Transfer album tracks (like each track)
             for album in selected.get("albums", []):
@@ -196,14 +214,15 @@ class TransferController:
 
                     try:
                         result = self.matcher.match_track(track)
-                    except Exception:
-                        result = MatchResult(track=track, status=TransferStatus.FAILED)
+                    except Exception as e:
+                        result = MatchResult(track=track, status=TransferStatus.FAILED, error=str(e))
                     self._queue.put({"type": "result", "result": result})
 
                     if result.status == TransferStatus.SUCCESS and result.best_match:
                         video_id = result.best_match.get("videoId", "")
                         track.yt_video_id = video_id
                         track.transfer_status = TransferStatus.SUCCESS
+                        consecutive_failures = 0
                         if not self.dry_run:
                             try:
                                 self.yt.rate_song(video_id, "LIKE")
@@ -213,13 +232,20 @@ class TransferController:
                         track.transfer_status = TransferStatus.AMBIGUOUS
                         track.yt_candidates = result.candidates or []
                         self.progress.ambiguous_tracks.append(result)
+                        consecutive_failures = 0
                     else:
                         track.transfer_status = TransferStatus.FAILED
                         self.progress.failed_tracks.append(track)
+                        consecutive_failures += 1
 
                     completed += 1
                     self._queue.put({"type": "progress", "completed": completed, "item": f"Album track: {track.name}"})
                     self.state_manager.save()
+
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        err = result.error or "Unknown error"
+                        self._queue.put({"type": "error", "error": f"Stopped: {consecutive_failures} consecutive failures ({err})"})
+                        return
 
                 album.transfer_status = TransferStatus.SUCCESS
 

@@ -22,25 +22,25 @@ class BottomBar(tk.Frame):
         self._build_ui()
 
     def _build_ui(self):
-        # Dry-run checkbox
-        self.dry_run_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self, text="Dry Run", variable=self.dry_run_var).pack(side="left", padx=5)
+        # Left: buttons
+        btn_frame = tk.Frame(self)
+        btn_frame.pack(side="left")
 
-        # Transfer button
-        self.transfer_btn = ttk.Button(self, text="Transfer Selected", command=self._start_transfer)
+        self.dry_run_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(btn_frame, text="Dry Run", variable=self.dry_run_var).pack(side="left", padx=5)
+
+        self.transfer_btn = ttk.Button(btn_frame, text="Transfer Selected", command=self._start_transfer)
         self.transfer_btn.pack(side="left", padx=5)
 
-        # Cancel button
-        self.cancel_btn = ttk.Button(self, text="Cancel", command=self._cancel_transfer, state="disabled")
+        self.cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self._cancel_transfer, state="disabled")
         self.cancel_btn.pack(side="left", padx=5)
 
-        # Status label
-        self.status_label = tk.Label(self, text="", anchor="w")
-        self.status_label.pack(side="right", padx=5)
-
-        # Progress bar
+        # Right: fixed-width progress bar + status label that fills remaining space
         self.progress = ttk.Progressbar(self, mode="determinate", length=200)
-        self.progress.pack(side="right", padx=5)
+        self.progress.pack(side="left", padx=(10, 5))
+
+        self.status_label = tk.Label(self, text="", anchor="w")
+        self.status_label.pack(side="left", fill="x", expand=True, padx=5)
 
     def _start_transfer(self):
         selected = self.main_screen.get_selected_items()

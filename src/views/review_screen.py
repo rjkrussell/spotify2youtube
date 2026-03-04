@@ -50,26 +50,43 @@ class ReviewScreen(tk.Frame):
             tk.Label(summary_frame, text=f"{label}: {count}", foreground=color,
                      font=("TkDefaultFont", 12, "bold")).grid(row=0, column=i, padx=15)
 
-        # Results treeview
-        tree_frame = tk.Frame(self)
-        tree_frame.pack(fill="both", expand=True, padx=20, pady=5)
+        # Results treeview in a sunken frame
+        outer_frame = tk.LabelFrame(self, text="Results (scroll to see error details)",
+                                     relief="sunken", borderwidth=2)
+        outer_frame.pack(fill="both", expand=True, padx=20, pady=5)
 
-        columns = ("track", "artists", "status", "score")
-        self.results_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=12)
+        # Use grid inside so scrollbars sit flush at edges
+        outer_frame.rowconfigure(0, weight=1)
+        outer_frame.columnconfigure(0, weight=1)
+
+        columns = ("track", "artists", "status", "score", "error")
+        self.results_tree = ttk.Treeview(outer_frame, columns=columns, show="headings", height=12)
         self.results_tree.heading("track", text="Track")
         self.results_tree.heading("artists", text="Artists")
         self.results_tree.heading("status", text="Status")
         self.results_tree.heading("score", text="Score")
-        self.results_tree.column("track", width=250)
-        self.results_tree.column("artists", width=200)
-        self.results_tree.column("status", width=100)
-        self.results_tree.column("score", width=60)
+        self.results_tree.heading("error", text="Error")
+        self.results_tree.column("track", width=200, minwidth=120, stretch=False)
+        self.results_tree.column("artists", width=150, minwidth=80, stretch=False)
+        self.results_tree.column("status", width=80, minwidth=60, stretch=False)
+        self.results_tree.column("score", width=50, minwidth=40, stretch=False)
+        self.results_tree.column("error", width=500, minwidth=200, stretch=False)
 
-        scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.results_tree.yview)
-        self.results_tree.configure(yscrollcommand=scroll.set)
+        yscroll = ttk.Scrollbar(outer_frame, orient="vertical", command=self.results_tree.yview)
+        xscroll = ttk.Scrollbar(outer_frame, orient="horizontal", command=self.results_tree.xview)
+        self.results_tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
 
-        self.results_tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        self.results_tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+
+        # Enable trackpad/mousewheel scrolling (macOS sends <MouseWheel> for both axes)
+        def _on_mousewheel(event):
+            self.results_tree.yview_scroll(-event.delta, "units")
+        def _on_shift_mousewheel(event):
+            self.results_tree.xview_scroll(-event.delta, "units")
+        self.results_tree.bind("<MouseWheel>", _on_mousewheel)
+        self.results_tree.bind("<Shift-MouseWheel>", _on_shift_mousewheel)
 
         # Tag colors for status
         self.results_tree.tag_configure("success", foreground="green")
@@ -86,6 +103,7 @@ class ReviewScreen(tk.Frame):
                 ", ".join(result.track.artists),
                 result.status.value.title(),
                 f"{result.score:.0f}" if result.score else "",
+                result.error or "",
             ), tags=(tag,))
             self._result_map[item_id] = result
 
@@ -243,7 +261,7 @@ class ReviewScreen(tk.Frame):
 
         with open(path, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["Track", "Artists", "Album", "Status", "Score", "YT Video ID"])
+            writer.writerow(["Track", "Artists", "Album", "Status", "Score", "YT Video ID", "Error"])
             for result in self.progress.results:
                 writer.writerow([
                     result.track.name,
@@ -252,6 +270,7 @@ class ReviewScreen(tk.Frame):
                     result.status.value,
                     f"{result.score:.0f}" if result.score else "",
                     result.track.yt_video_id or "",
+                    result.error or "",
                 ])
 
     def _go_back(self):

@@ -41,6 +41,7 @@ class MatchResult:
     best_match: dict | None = None
     score: float = 0.0
     candidates: list[dict] | None = None
+    error: str | None = None
 
 
 class TrackMatcher:

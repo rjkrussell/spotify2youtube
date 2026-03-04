@@ -52,7 +52,7 @@ class Track:
         return cls(
             spotify_id=d["spotify_id"],
             name=d["name"],
-            artists=d["artists"],
+            artists=[a for a in d["artists"] if a],
             album=d["album"],
             duration_ms=d["duration_ms"],
             selected=d.get("selected", True),

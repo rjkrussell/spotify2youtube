@@ -74,7 +74,7 @@ class YouTubeService:
             params=params,
             headers=self._auth_headers(),
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()
 
     def _api_post(self, endpoint: str, body: dict, params: dict | None = None) -> dict:
@@ -84,8 +84,31 @@ class YouTubeService:
             json=body,
             headers=self._auth_headers(),
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()
+
+    @staticmethod
+    def _check_response(resp: requests.Response) -> None:
+        if resp.status_code == 403:
+            try:
+                detail = resp.json()
+                reason = detail.get("error", {}).get("errors", [{}])[0].get("reason", "")
+            except Exception:
+                reason = ""
+            if reason == "quotaExceeded":
+                raise PermissionError(
+                    "YouTube API quota exceeded (resets at midnight PT)"
+                )
+            if reason == "accessNotConfigured" or "API has not been used" in resp.text:
+                raise PermissionError(
+                    'YouTube Data API v3 is not enabled. Go to '
+                    'console.cloud.google.com → APIs & Services → '
+                    'Library → search "YouTube Data API v3" → Enable.'
+                )
+            raise PermissionError(
+                f"YouTube API returned 403 Forbidden ({reason or 'check API is enabled and scopes are correct'})"
+            )
+        resp.raise_for_status()
 
     # ------------------------------------------------------------------
     # OAuth flow (still uses ytmusicapi's OAuthCredentials for device-code)

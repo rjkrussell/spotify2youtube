@@ -14,7 +14,7 @@ CREDENTIALS_PATH = os.path.join(DATA_DIR, "credentials.json")
 class Credentials:
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
-    spotify_redirect_uri: str = "http://localhost:8888/callback"
+    spotify_redirect_uri: str = "http://127.0.0.1:8888/callback"
     youtube_client_id: str = ""
     youtube_client_secret: str = ""
     youtube_oauth_token: dict = field(default_factory=dict)
@@ -35,10 +35,10 @@ class CredentialsManager:
         if os.path.exists(self.path):
             with open(self.path, "r") as f:
                 data = json.load(f)
-            redirect_uri = data.get("spotify_redirect_uri", "http://localhost:8888/callback")
+            redirect_uri = data.get("spotify_redirect_uri", "http://127.0.0.1:8888/callback")
             # Auto-migrate old default that Spotify now rejects
-            if redirect_uri == "http://127.0.0.1:8888/callback":
-                redirect_uri = "http://localhost:8888/callback"
+            if redirect_uri == "http://localhost:8888/callback":
+                redirect_uri = "http://127.0.0.1:8888/callback"
 
             self.credentials = Credentials(
                 spotify_client_id=data.get("spotify_client_id", ""),
