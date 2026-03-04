@@ -5,6 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from src.app import SPOTIFY_GREEN, get_colors
+
 
 class CheckboxTreeview(ttk.Treeview):
     """A Treeview with tri-state checkboxes using tag-based rendering."""
@@ -18,9 +20,10 @@ class CheckboxTreeview(ttk.Treeview):
         kwargs.setdefault("show", "tree")
         super().__init__(master, **kwargs)
 
-        self.tag_configure("checked", foreground="black")
-        self.tag_configure("unchecked", foreground="gray")
-        self.tag_configure("tristate", foreground="black")
+        c = get_colors()
+        self.tag_configure("checked", foreground=SPOTIFY_GREEN)
+        self.tag_configure("unchecked", foreground=c["unchecked"])
+        self.tag_configure("tristate", foreground=c["warning"])
 
         self.bind("<Button-1>", self._on_click)
 

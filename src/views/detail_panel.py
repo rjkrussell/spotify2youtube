@@ -32,7 +32,7 @@ class DetailPanel(tk.Frame):
                                      anchor="center", foreground="gray")
         self._placeholder.pack(expand=True)
 
-    def show_item(self, item_id: str, obj):
+    def show_item(self, item_id: str, obj, transfer_action: str = ""):
         """Show the appropriate detail panel for the given object."""
         self.current_item_id = item_id
         self.current_obj = obj
@@ -40,6 +40,14 @@ class DetailPanel(tk.Frame):
         # Clear existing content
         for w in self.winfo_children():
             w.destroy()
+
+        # Show transfer action label at the top (categories handle it inline)
+        if transfer_action and not isinstance(obj, list):
+            from src.app import get_colors
+            action_label = tk.Label(self, text=transfer_action,
+                                    foreground=get_colors()["action"],
+                                    font=("TkDefaultFont", 12, "italic"))
+            action_label.pack(anchor="w", padx=10, pady=(5, 0))
 
         if isinstance(obj, Playlist):
             self._show_playlist(obj)
@@ -50,7 +58,7 @@ class DetailPanel(tk.Frame):
         elif isinstance(obj, Track):
             self._show_track(obj)
         elif isinstance(obj, list):
-            self._show_category(obj)
+            self._show_category(obj, transfer_action)
 
     # --- Playlist detail ---
     def _show_playlist(self, pl: Playlist):
@@ -192,21 +200,80 @@ class DetailPanel(tk.Frame):
             tk.Label(config, text=f"Matched: {track.yt_video_id}", foreground="green").grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
 
     # --- Category header ---
-    def _show_category(self, items: list):
+    def _show_category(self, items: list, transfer_action: str = ""):
+        # Single compact header row — matches LHS "● Spotify Library" header padding
         header = tk.Frame(self)
-        header.pack(fill="x", padx=10, pady=5)
+        header.pack(fill="x")
 
-        tk.Label(header, text=f"Category: {len(items)} items", font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
+        # Determine category label
+        if items and isinstance(items[0], Playlist):
+            label = f"\u25b6 Playlists ({len(items)})"
+        elif items and isinstance(items[0], Album):
+            label = f"\u25b6 Albums ({len(items)})"
+        elif items and isinstance(items[0], Artist):
+            label = f"\u25b6 Artists ({len(items)})"
+        elif items and isinstance(items[0], Track):
+            label = f"\u25b6 Liked Songs ({len(items)})"
+        else:
+            label = f"\u25b6 {len(items)} items"
 
-        config = tk.Frame(self)
-        config.pack(fill="x", padx=10, pady=5)
+        from src.app import YOUTUBE_RED, get_colors
+        tk.Label(header, text=label, font=("TkDefaultFont", 11, "bold"),
+                 foreground=YOUTUBE_RED).pack(side="left", padx=5, pady=2)
 
-        tk.Label(config, text="Bulk matching preference:").grid(row=0, column=0, sticky="w", pady=2)
+        if transfer_action:
+            tk.Label(header, text=transfer_action,
+                     foreground=get_colors()["action"],
+                     font=("TkDefaultFont", 10, "italic")).pack(side="left")
+
+        # Matching preference on the right side of the same row
         match_var = tk.StringVar(value="fuzzy")
-        match_combo = ttk.Combobox(config, textvariable=match_var, values=["fuzzy", "strict", "manual"],
-                                   state="readonly", width=15)
-        match_combo.grid(row=0, column=1, sticky="w", padx=5, pady=2)
+        match_combo = ttk.Combobox(header, textvariable=match_var, values=["fuzzy", "strict", "manual"],
+                                   state="readonly", width=10)
+        match_combo.pack(side="right", padx=5, pady=2)
+        tk.Label(header, text="Matching:").pack(side="right", pady=2)
         match_var.trace_add("write", lambda *_: self._bulk_set_matching(items, match_var.get()))
+
+        # Show items in an expandable tree
+        if not items:
+            return
+
+        tree_frame = tk.Frame(self)
+        tree_frame.pack(fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+
+        cat_tree = ttk.Treeview(tree_frame, show="tree", yscrollcommand=scrollbar.set)
+        cat_tree.pack(fill="both", expand=True)
+        scrollbar.config(command=cat_tree.yview)
+
+        def _prefix(selected: bool) -> str:
+            return "\u2611" if selected else "\u2610"
+
+        if isinstance(items[0], Playlist):
+            for pl in items:
+                pl_id = cat_tree.insert("", "end",
+                    text=f"{_prefix(pl.selected)} {pl.display_name()} ({pl.track_count} tracks)")
+                for t in pl.tracks:
+                    cat_tree.insert(pl_id, "end",
+                        text=f"{_prefix(t.selected)} {t.name} \u2014 {', '.join(t.artists)}")
+        elif isinstance(items[0], Album):
+            for alb in items:
+                alb_id = cat_tree.insert("", "end",
+                    text=f"{_prefix(alb.selected)} {alb.name} \u2014 {', '.join(alb.artists)} ({alb.track_count} tracks)")
+                for t in alb.tracks:
+                    cat_tree.insert(alb_id, "end",
+                        text=f"{_prefix(t.selected)} {t.name} \u2014 {', '.join(t.artists)}")
+        elif isinstance(items[0], Artist):
+            for art in items:
+                genres = f" ({', '.join(art.genres)})" if art.genres else ""
+                cat_tree.insert("", "end",
+                    text=f"{_prefix(art.selected)} {art.name}{genres}")
+        elif isinstance(items[0], Track):
+            for t in items:
+                cat_tree.insert("", "end",
+                    text=f"{_prefix(t.selected)} {t.name} \u2014 {', '.join(t.artists)}")
 
     # --- Helper methods ---
     def _debounced_rename(self, pl: Playlist, name: str):

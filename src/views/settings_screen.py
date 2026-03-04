@@ -9,6 +9,8 @@ import webbrowser
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from src.app import SPOTIFY_GREEN, YOUTUBE_RED, get_colors
+
 if TYPE_CHECKING:
     from src.app import App
 
@@ -23,15 +25,26 @@ class SettingsScreen(tk.Frame):
         self._sp_cancel = threading.Event()
         self._yt_cancel = threading.Event()
 
-        # Title
-        title = tk.Label(self, text="spotify2youtube.py — Settings", font=("TkDefaultFont", 16, "bold"))
-        title.pack(pady=(20, 10))
+        # Branded title
+        title_frame = tk.Frame(self)
+        title_frame.pack(pady=(20, 10))
+        tk.Label(title_frame, text="\u266b", font=("TkDefaultFont", 18),
+                 foreground=SPOTIFY_GREEN).pack(side="left")
+        tk.Label(title_frame, text=" Spotify", font=("TkDefaultFont", 16, "bold"),
+                 foreground=SPOTIFY_GREEN).pack(side="left")
+        c = get_colors()
+        tk.Label(title_frame, text="2", font=("TkDefaultFont", 16, "bold"),
+                 foreground=c["separator"]).pack(side="left")
+        tk.Label(title_frame, text="YouTube", font=("TkDefaultFont", 16, "bold"),
+                 foreground=YOUTUBE_RED).pack(side="left")
+        tk.Label(title_frame, text="  \u2014  Settings", font=("TkDefaultFont", 14),
+                 foreground=c["fg_muted"]).pack(side="left")
 
         form = tk.Frame(self)
         form.pack(fill="both", expand=True, padx=40, pady=10)
 
         # --- Spotify section ---
-        sp_frame = ttk.LabelFrame(form, text="Spotify", padding=10)
+        sp_frame = ttk.LabelFrame(form, text="\u25cf Spotify", padding=10)
         sp_frame.pack(fill="x", pady=(0, 15))
 
         creds = self.app.credentials_manager.credentials
@@ -94,7 +107,7 @@ class SettingsScreen(tk.Frame):
         ])
 
         # --- YouTube Music section ---
-        yt_frame = ttk.LabelFrame(form, text="YouTube Music", padding=10)
+        yt_frame = ttk.LabelFrame(form, text="\u25b6 YouTube Music", padding=10)
         yt_frame.pack(fill="x", pady=(0, 15))
 
         # Step 1: Enter credentials

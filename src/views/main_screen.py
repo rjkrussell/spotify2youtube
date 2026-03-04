@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from src.app import SPOTIFY_GREEN, YOUTUBE_RED, get_colors, _fix_paned_cursor
 from src.models.library import (
     Track, Playlist, Album, Artist, SpotifyLibrary,
     MatchingPreference, TransferStatus,
@@ -38,22 +39,36 @@ class MainScreen(tk.Frame):
         self._top_bar.pack(fill="x", padx=5, pady=5)
         top = self._top_bar
 
-        tk.Label(top, text="spotify2youtube.py", font=("TkDefaultFont", 14, "bold")).pack(side="left")
-
+        # Right-side buttons (pack first so title can center in remaining space)
         ttk.Button(top, text="Settings", command=lambda: self.app.show_screen("settings")).pack(side="right")
-        self._refresh_btn = ttk.Button(top, text="Refresh Library", command=self._show_fetch_panel)
-        self._refresh_btn.pack(side="right", padx=5)
         ttk.Button(top, text="Guide", command=self._toggle_guide).pack(side="right", padx=5)
+        self._theme_btn = ttk.Button(top, text="\u263e", width=3, command=self._toggle_theme)
+        self._theme_btn.pack(side="right", padx=5)
+
+        # Centered app title
+        title_frame = tk.Frame(top)
+        title_frame.pack(expand=True)
+        tk.Label(title_frame, text="\u266b", font=("TkDefaultFont", 18),
+                 foreground=SPOTIFY_GREEN).pack(side="left")
+        tk.Label(title_frame, text=" Spotify", font=("TkDefaultFont", 16, "bold"),
+                 foreground=SPOTIFY_GREEN).pack(side="left")
+        c = get_colors()
+        self._title_sep = tk.Label(title_frame, text="2", font=("TkDefaultFont", 16, "bold"),
+                                   foreground=c["separator"])
+        self._title_sep.pack(side="left")
+        tk.Label(title_frame, text="YouTube", font=("TkDefaultFont", 16, "bold"),
+                 foreground=YOUTUBE_RED).pack(side="left")
 
         # Guide panel (hidden by default)
         self._guide_frame = tk.Frame(self)
         self._guide_visible = False
-        guide_text = tk.Text(self._guide_frame, wrap="word", borderwidth=1, relief="solid",
-                             highlightthickness=0, padx=10, pady=10, cursor="arrow",
-                             height=20)
-        guide_text.pack(fill="x", padx=5, pady=(0, 5))
+        c = get_colors()
+        self._guide_text = tk.Text(self._guide_frame, wrap="word", borderwidth=0,
+                                   highlightthickness=0, padx=12, pady=12, cursor="arrow",
+                                   height=18, background=c["guide_bg"], foreground=c["guide_fg"])
+        self._guide_text.pack(fill="x", padx=10, pady=(0, 5))
         guide_content = (
-            "How to use spotify2youtube\n"
+            "How to use Spotify2YouTube\n"
             "\n"
             "1. Fetch your Spotify library\n"
             "   Click \"Refresh Library\" and choose which categories to sync\n"
@@ -86,23 +101,54 @@ class MainScreen(tk.Frame):
             "   losing other data. Previously transferred tracks are skipped on\n"
             "   re-transfer."
         )
-        guide_text.insert("1.0", guide_content)
-        guide_text.tag_add("title", "1.0", "1.end")
-        guide_text.tag_configure("title", font=("TkDefaultFont", 12, "bold"))
-        guide_text.configure(state="disabled")
-        guide_scroll = ttk.Scrollbar(self._guide_frame, orient="vertical", command=guide_text.yview)
-        guide_text.configure(yscrollcommand=guide_scroll.set)
+        self._guide_text.insert("1.0", guide_content)
+        self._guide_text.tag_add("title", "1.0", "1.end")
+        self._guide_text.tag_configure("title", font=("TkDefaultFont", 13, "bold"), foreground=c["guide_title"])
+        self._guide_text.configure(state="disabled")
+        guide_scroll = ttk.Scrollbar(self._guide_frame, orient="vertical", command=self._guide_text.yview)
+        self._guide_text.configure(yscrollcommand=guide_scroll.set)
 
-        # --- Inline fetch panel (shown when no data) ---
+        # --- Library label ---
+        lib_label = tk.Label(self, text="\u266a Library", font=("TkDefaultFont", 13, "bold"))
+        lib_label.pack(anchor="w", padx=10, pady=(5, 0))
+
+        # --- Stacking container for fetch panel and paned (grid + tkraise) ---
+        self._stack = tk.Frame(self)
+        self._stack.pack(fill="both", expand=True, padx=5, pady=5)
+        self._stack.grid_rowconfigure(0, weight=1)
+        self._stack.grid_columnconfigure(0, weight=1)
+
+        # Inline fetch panel
         from src.views.fetch_dialog import FetchPanel
-        self._fetch_panel = FetchPanel(self, on_go=self._on_go)
+        self._fetch_panel = FetchPanel(self._stack, on_go=self._on_go)
+        self._fetch_panel.grid(row=0, column=0, sticky="nsew")
 
-        # --- Paned window: tree (left) + detail (right) ---
-        self.paned = ttk.PanedWindow(self, orient="horizontal")
+        # Paned window: tree (left) + detail (right)
+        self.paned = ttk.PanedWindow(self._stack, orient="horizontal")
+        self.paned.grid(row=0, column=0, sticky="nsew")
+        _fix_paned_cursor(self.paned)
 
-        # Left: tree with scrollbar
-        tree_frame = tk.Frame(self.paned)
-        self.paned.add(tree_frame, weight=1)
+        # Left: Spotify panel
+        self._left_frame = tk.Frame(self.paned)
+        self.paned.add(self._left_frame, weight=1)
+
+        spotify_header = tk.Frame(self._left_frame)
+        spotify_header.pack(fill="x")
+        tk.Label(spotify_header, text="\u25cf Spotify Library",
+                 font=("TkDefaultFont", 11, "bold"), foreground=SPOTIFY_GREEN).pack(side="left", padx=5, pady=2)
+        self._refresh_btn = ttk.Button(spotify_header, text="\u21bb Refresh", command=self._show_fetch_panel)
+        self._refresh_btn.pack(side="right", padx=5, pady=2)
+
+        # Loading progress (for library fetch) — sits below header, above tree
+        self._loading_frame = tk.Frame(self._left_frame)
+        self.status_label = tk.Label(self._loading_frame, text="", anchor="w")
+        self.status_label.pack(side="left", padx=5)
+        self._cancel_btn = ttk.Button(self._loading_frame, text="Cancel", command=self._cancel_fetch)
+        self.progress = ttk.Progressbar(self._loading_frame, mode="indeterminate", length=150)
+
+        self._tree_frame = tk.Frame(self._left_frame)
+        self._tree_frame.pack(fill="both", expand=True)
+        tree_frame = self._tree_frame
 
         tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical")
         tree_scroll.pack(side="right", fill="y")
@@ -111,25 +157,54 @@ class MainScreen(tk.Frame):
         self.tree.pack(fill="both", expand=True)
         tree_scroll.config(command=self.tree.yview)
 
+        # Transfer status indicator tags
+        c = get_colors()
+        self.tree.tag_configure("t_success", foreground=c["success"])
+        self.tree.tag_configure("t_failed", foreground=c["summary_fail"])
+        self.tree.tag_configure("t_ambiguous", foreground=c["warning"])
+
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<<CheckChanged>>", self._on_check_changed)
 
-        # Right: detail panel
+        # Right: YouTube detail panel (no static header — DetailPanel shows its own)
+        right_frame = tk.Frame(self.paned)
+        self.paned.add(right_frame, weight=2)
+
         from src.views.detail_panel import DetailPanel
-        self.detail_panel = DetailPanel(self.paned, app=self.app, main_screen=self)
-        self.paned.add(self.detail_panel, weight=2)
+        self.detail_panel = DetailPanel(right_frame, app=self.app, main_screen=self)
+        self.detail_panel.pack(fill="both", expand=True)
 
         # Bottom bar
         from src.views.bottom_bar import BottomBar
         self.bottom_bar = BottomBar(self, app=self.app, main_screen=self)
         self.bottom_bar.pack(fill="x", padx=5, pady=5)
 
-        # Loading progress bar (for library fetch)
-        self._loading_frame = tk.Frame(self)
-        self.status_label = tk.Label(self._loading_frame, text="", anchor="w")
-        self.status_label.pack(side="left")
-        self.progress = ttk.Progressbar(self._loading_frame, mode="indeterminate", length=200)
-        self._cancel_btn = ttk.Button(self._loading_frame, text="Cancel", command=self._cancel_fetch)
+        # Register for theme changes
+        self.app.on_theme_change(self._on_theme_change)
+        self._update_theme_button()
+
+    # ------------------------------------------------------------------
+    # Theme
+    # ------------------------------------------------------------------
+
+    def _toggle_theme(self):
+        self.app.toggle_theme()
+        self._update_theme_button()
+
+    def _update_theme_button(self):
+        # Sun/moon icon
+        self._theme_btn.configure(text="\u2600" if self.app.is_dark else "\u263e")
+
+    def _on_theme_change(self):
+        """Update theme-dependent widgets."""
+        c = get_colors()
+        self._title_sep.configure(foreground=c["separator"])
+        self._guide_text.configure(background=c["guide_bg"], foreground=c["guide_fg"])
+        self._guide_text.tag_configure("title", foreground=c["guide_title"])
+        self.tree.tag_configure("checked", foreground=SPOTIFY_GREEN)
+        self.tree.tag_configure("unchecked", foreground=c["unchecked"])
+        self.tree.tag_configure("tristate", foreground=c["warning"])
+        self._update_theme_button()
 
     # ------------------------------------------------------------------
     # Show / hide helpers
@@ -145,14 +220,12 @@ class MainScreen(tk.Frame):
 
     def _show_fetch_panel_ui(self):
         """Show the inline fetch panel, hide the tree/detail paned area."""
-        self.paned.pack_forget()
         self._fetch_panel.reset()
-        self._fetch_panel.pack(fill="both", expand=True, padx=5, pady=5)
+        self._fetch_panel.tkraise()
 
     def _show_paned_ui(self):
         """Show the tree/detail paned area, hide the fetch panel."""
-        self._fetch_panel.pack_forget()
-        self.paned.pack(fill="both", expand=True, padx=5, pady=5)
+        self.paned.tkraise()
 
     # ------------------------------------------------------------------
     # Screen lifecycle
@@ -197,7 +270,7 @@ class MainScreen(tk.Frame):
         names = [k.replace("_", " ").title() for k, v in categories.items() if v]
         status_text = f"Fetching: {', '.join(names)}..."
 
-        self._loading_frame.pack(fill="x", padx=5, pady=2)
+        self._loading_frame.pack(fill="x", padx=5, pady=2, before=self._tree_frame)
         self.status_label.config(text=status_text)
         self.progress.pack(side="right", padx=5)
         self._cancel_btn.pack(side="right", padx=(5, 0))
@@ -320,13 +393,18 @@ class MainScreen(tk.Frame):
     # Fetch callbacks
     # ------------------------------------------------------------------
 
+    def _hide_fetch_progress(self):
+        """Hide the fetch progress bar and cancel button."""
+        self.progress.stop()
+        self.progress.pack_forget()
+        self._cancel_btn.pack_forget()
+        self._loading_frame.pack_forget()
+
     def _cancel_fetch(self):
         """Cancel a running fetch and return to the fetch panel."""
         self._cancel_event.set()
         self._fetch_in_progress = False
-        self.progress.stop()
-        self._cancel_btn.pack_forget()
-        self._loading_frame.pack_forget()
+        self._hide_fetch_progress()
         self.app.log("Fetch cancelled.", "info")
         self._show_fetch_panel_ui()
 
@@ -334,9 +412,7 @@ class MainScreen(tk.Frame):
         if self._cancel_event.is_set():
             return
         self._fetch_in_progress = False
-        self.progress.stop()
-        self._cancel_btn.pack_forget()
-        self._loading_frame.pack_forget()
+        self._hide_fetch_progress()
         summary = (f"Library: {len(library.playlists)} playlists, "
                    f"{len(library.liked_tracks)} liked, "
                    f"{len(library.albums)} albums, "
@@ -349,9 +425,7 @@ class MainScreen(tk.Frame):
         if self._cancel_event.is_set():
             return
         self._fetch_in_progress = False
-        self.progress.stop()
-        self._cancel_btn.pack_forget()
-        self._loading_frame.pack_forget()
+        self._hide_fetch_progress()
         self.bottom_bar.status_label.config(text=f"Fetch error: {error}")
         self.app.log(f"Fetch error: {error}", "error")
 
@@ -365,63 +439,92 @@ class MainScreen(tk.Frame):
         self.item_map.clear()
         self.category_ids.clear()
 
+        _STATUS_SUFFIX = {
+            TransferStatus.SUCCESS: " \u2713",
+            TransferStatus.FAILED: " \u2717",
+            TransferStatus.AMBIGUOUS: " ?",
+        }
+        _STATUS_TAG = {
+            TransferStatus.SUCCESS: "t_success",
+            TransferStatus.FAILED: "t_failed",
+            TransferStatus.AMBIGUOUS: "t_ambiguous",
+        }
+
+        def _cat_label(name: str, items: list) -> str:
+            total = len(items)
+            remaining = sum(1 for i in items if i.transfer_status != TransferStatus.SUCCESS)
+            if remaining == total:
+                return f"{name} ({total})"
+            return f"{name} ({remaining}/{total} remaining)"
+
+        def _suffix(obj) -> str:
+            return _STATUS_SUFFIX.get(obj.transfer_status, "")
+
+        def _tags(obj) -> tuple:
+            tag = _STATUS_TAG.get(obj.transfer_status)
+            return (tag,) if tag else ()
+
         # Playlists
         if library.playlists:
-            cat_id = self.tree.insert_item(text="Playlists", checked=False)
+            cat_id = self.tree.insert_item(text=_cat_label("Playlists", library.playlists), checked=False)
             self.category_ids["playlists"] = cat_id
             self.item_map[cat_id] = library.playlists
             for pl in library.playlists:
-                pl_id = self.tree.insert_item(parent=cat_id, text=f"{pl.display_name()} ({pl.track_count} tracks)",
-                                              checked=pl.selected)
+                pl_id = self.tree.insert_item(
+                    parent=cat_id,
+                    text=f"{pl.display_name()} ({pl.track_count} tracks){_suffix(pl)}",
+                    checked=pl.selected, tags=_tags(pl))
                 self.item_map[pl_id] = pl
                 for track in pl.tracks:
                     t_id = self.tree.insert_item(
                         parent=pl_id,
-                        text=f"{track.name} — {', '.join(track.artists)}",
-                        checked=track.selected,
+                        text=f"{track.name} — {', '.join(track.artists)}{_suffix(track)}",
+                        checked=track.selected, tags=_tags(track),
                     )
                     self.item_map[t_id] = track
 
         # Liked Songs
         if library.liked_tracks:
-            cat_id = self.tree.insert_item(text=f"Liked Songs ({len(library.liked_tracks)})", checked=False)
+            cat_id = self.tree.insert_item(text=_cat_label("Liked Songs", library.liked_tracks), checked=False)
             self.category_ids["liked"] = cat_id
             self.item_map[cat_id] = library.liked_tracks
             for track in library.liked_tracks:
                 t_id = self.tree.insert_item(
                     parent=cat_id,
-                    text=f"{track.name} — {', '.join(track.artists)}",
-                    checked=track.selected,
+                    text=f"{track.name} — {', '.join(track.artists)}{_suffix(track)}",
+                    checked=track.selected, tags=_tags(track),
                 )
                 self.item_map[t_id] = track
 
         # Albums
         if library.albums:
-            cat_id = self.tree.insert_item(text="Albums", checked=False)
+            cat_id = self.tree.insert_item(text=_cat_label("Albums", library.albums), checked=False)
             self.category_ids["albums"] = cat_id
             self.item_map[cat_id] = library.albums
             for album in library.albums:
-                a_id = self.tree.insert_item(parent=cat_id,
-                                             text=f"{album.name} — {', '.join(album.artists)}",
-                                             checked=album.selected)
+                a_id = self.tree.insert_item(
+                    parent=cat_id,
+                    text=f"{album.name} — {', '.join(album.artists)}{_suffix(album)}",
+                    checked=album.selected, tags=_tags(album))
                 self.item_map[a_id] = album
                 for track in album.tracks:
                     t_id = self.tree.insert_item(
                         parent=a_id,
-                        text=f"{track.name} — {', '.join(track.artists)}",
-                        checked=track.selected,
+                        text=f"{track.name} — {', '.join(track.artists)}{_suffix(track)}",
+                        checked=track.selected, tags=_tags(track),
                     )
                     self.item_map[t_id] = track
 
         # Artists
         if library.artists:
-            cat_id = self.tree.insert_item(text="Artists", checked=False)
+            cat_id = self.tree.insert_item(text=_cat_label("Artists", library.artists), checked=False)
             self.category_ids["artists"] = cat_id
             self.item_map[cat_id] = library.artists
             for artist in library.artists:
-                ar_id = self.tree.insert_item(parent=cat_id,
-                                              text=f"{artist.name}",
-                                              checked=artist.selected)
+                ar_id = self.tree.insert_item(
+                    parent=cat_id,
+                    text=f"{artist.name}{_suffix(artist)}",
+                    checked=artist.selected, tags=_tags(artist))
                 self.item_map[ar_id] = artist
 
         # Cascade up from leaves so parent states reflect children
@@ -445,6 +548,23 @@ class MainScreen(tk.Frame):
         for root_item in self.tree.get_children():
             _fix(root_item)
 
+    def _get_transfer_action(self, item_id: str) -> str:
+        """Return a human-readable label describing what the transfer will do."""
+        # Walk up the tree to find which category this item belongs to
+        current = item_id
+        while current:
+            for cat_name, cat_id in self.category_ids.items():
+                if current == cat_id:
+                    actions = {
+                        "playlists": "Will be added to a YouTube playlist",
+                        "liked": "Will be liked on YouTube",
+                        "albums": "Will be liked on YouTube",
+                        "artists": "Will subscribe on YouTube",
+                    }
+                    return actions.get(cat_name, "")
+            current = self.tree.parent(current)
+        return ""
+
     def _on_tree_select(self, event):
         """Handle tree selection — show detail panel for selected item."""
         selection = self.tree.selection()
@@ -455,7 +575,8 @@ class MainScreen(tk.Frame):
         if obj is None:
             return
 
-        self.detail_panel.show_item(item_id, obj)
+        action = self._get_transfer_action(item_id)
+        self.detail_panel.show_item(item_id, obj, transfer_action=action)
 
     def _on_check_changed(self, event):
         """Sync checkbox states back to model objects."""

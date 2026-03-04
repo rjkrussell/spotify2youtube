@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog
 from typing import TYPE_CHECKING
 
+from src.app import SPOTIFY_GREEN, YOUTUBE_RED, get_colors
 from src.models.library import TransferStatus
 
 if TYPE_CHECKING:
@@ -24,10 +25,22 @@ class ReviewScreen(tk.Frame):
         self._build_ui()
 
     def _build_ui(self):
-        # Title
+        c = get_colors()
+
+        # Branded title
+        title_frame = tk.Frame(self)
+        title_frame.pack(pady=(15, 5))
+        tk.Label(title_frame, text="\u266b", font=("TkDefaultFont", 18),
+                 foreground=SPOTIFY_GREEN).pack(side="left")
+        tk.Label(title_frame, text=" Spotify", font=("TkDefaultFont", 16, "bold"),
+                 foreground=SPOTIFY_GREEN).pack(side="left")
+        tk.Label(title_frame, text="2", font=("TkDefaultFont", 16, "bold"),
+                 foreground=c["separator"]).pack(side="left")
+        tk.Label(title_frame, text="YouTube", font=("TkDefaultFont", 16, "bold"),
+                 foreground=YOUTUBE_RED).pack(side="left")
         dry_label = " (Dry Run)" if self.dry_run else ""
-        title = tk.Label(self, text=f"Transfer Results{dry_label}", font=("TkDefaultFont", 16, "bold"))
-        title.pack(pady=(15, 5))
+        tk.Label(title_frame, text=f"  \u2014  Transfer Results{dry_label}",
+                 font=("TkDefaultFont", 14), foreground=c["fg_muted"]).pack(side="left")
 
         # Summary
         summary_frame = tk.Frame(self)
@@ -40,10 +53,10 @@ class ReviewScreen(tk.Frame):
         skipped_count = sum(1 for r in results if r.status == TransferStatus.SKIPPED)
 
         summary_data = [
-            ("Matched", success_count, "green"),
-            ("Failed", failed_count, "red"),
-            ("Ambiguous", ambiguous_count, "orange"),
-            ("Skipped", skipped_count, "gray"),
+            ("Matched", success_count, c["success"]),
+            ("Failed", failed_count, c["summary_fail"]),
+            ("Ambiguous", ambiguous_count, c["warning"]),
+            ("Skipped", skipped_count, c["summary_skip"]),
         ]
 
         for i, (label, count, color) in enumerate(summary_data):
@@ -89,10 +102,10 @@ class ReviewScreen(tk.Frame):
         self.results_tree.bind("<Shift-MouseWheel>", _on_shift_mousewheel)
 
         # Tag colors for status
-        self.results_tree.tag_configure("success", foreground="green")
-        self.results_tree.tag_configure("failed", foreground="red")
-        self.results_tree.tag_configure("ambiguous", foreground="orange")
-        self.results_tree.tag_configure("skipped", foreground="gray")
+        self.results_tree.tag_configure("success", foreground=c["success"])
+        self.results_tree.tag_configure("failed", foreground=c["summary_fail"])
+        self.results_tree.tag_configure("ambiguous", foreground=c["warning"])
+        self.results_tree.tag_configure("skipped", foreground=c["summary_skip"])
 
         # Populate results
         self._result_map: dict[str, object] = {}
@@ -135,8 +148,8 @@ class ReviewScreen(tk.Frame):
         btn_frame = tk.Frame(self)
         btn_frame.pack(fill="x", padx=20, pady=10)
 
-        ttk.Button(btn_frame, text="Export Log", command=self._export_log).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Back to Library", command=self._go_back).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="\u2913 Export Log", command=self._export_log).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="\u266a Back to Library", command=self._go_back).pack(side="right", padx=5)
 
     def _on_select_result(self, event):
         """Show resolution options for selected ambiguous track."""

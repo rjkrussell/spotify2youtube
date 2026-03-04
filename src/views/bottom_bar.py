@@ -35,7 +35,7 @@ class BottomBar(tk.Frame):
         self.cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self._cancel_transfer, state="disabled")
         self.cancel_btn.pack(side="left", padx=5)
 
-        # Right: fixed-width progress bar + status label that fills remaining space
+        # Right: progress bar + status label
         self.progress = ttk.Progressbar(self, mode="determinate", length=200)
         self.progress.pack(side="left", padx=(10, 5))
 
@@ -105,31 +105,29 @@ class BottomBar(tk.Frame):
         self.transfer_btn.config(state="normal")
         self.cancel_btn.config(state="disabled")
 
-        if progress.error:
-            self.status_label.config(text=f"Error: {progress.error}")
-            return
-
-        if progress.cancelled:
-            self.status_label.config(text="Transfer cancelled. Progress saved.")
-            return
-
         # Count results
         success = sum(1 for r in progress.results if r.status.value == "success")
         failed = len(progress.failed_tracks)
         ambiguous = len(progress.ambiguous_tracks)
 
-        dry_label = " (dry run)" if self.controller.dry_run else ""
-        self.status_label.config(
-            text=f"Done{dry_label}: {success} matched, {failed} failed, {ambiguous} ambiguous"
-        )
+        if progress.error:
+            self.status_label.config(text=f"Error: {progress.error}")
+        elif progress.cancelled:
+            self.status_label.config(text="Transfer cancelled. Progress saved.")
+        else:
+            dry_label = " (dry run)" if self.controller.dry_run else ""
+            self.status_label.config(
+                text=f"Done{dry_label}: {success} matched, {failed} failed, {ambiguous} ambiguous"
+            )
 
-        # Show review screen
-        from src.views.review_screen import ReviewScreen
-        review = ReviewScreen(
-            parent=self.app.container,
-            app=self.app,
-            progress=progress,
-            dry_run=self.controller.dry_run,
-        )
-        self.app.add_screen("review", review)
-        self.app.show_screen("review")
+        # Always show review screen if there are any results
+        if progress.results:
+            from src.views.review_screen import ReviewScreen
+            review = ReviewScreen(
+                parent=self.app.container,
+                app=self.app,
+                progress=progress,
+                dry_run=self.controller.dry_run,
+            )
+            self.app.add_screen("review", review)
+            self.app.show_screen("review")
