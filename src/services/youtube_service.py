@@ -18,9 +18,10 @@ from ytmusicapi.auth.oauth import OAuthCredentials
 
 from src.models.credentials import Credentials, DATA_DIR
 
-OAUTH_PATH = os.path.join(DATA_DIR, "youtube_oauth.json")
+_MOCK_MODE = os.environ.get("YOUTUBE_MOCK") == "1"
+OAUTH_PATH = os.path.join(DATA_DIR, "youtube_oauth_mock.json" if _MOCK_MODE else "youtube_oauth.json")
 
-if os.environ.get("YOUTUBE_MOCK") == "1":
+if _MOCK_MODE:
     API_BASE = os.environ.get("YOUTUBE_API_BASE", "http://127.0.0.1:8444/youtube/v3")
     TOKEN_URL = os.environ.get("YOUTUBE_TOKEN_URL", "http://127.0.0.1:8444/oauth2/token")
 else:

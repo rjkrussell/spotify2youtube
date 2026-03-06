@@ -252,7 +252,7 @@ class TransferController:
                         continue
 
                     try:
-                        result = self.matcher.match_track(track)
+                        result = self.matcher.match_track(track, album_name=album.name)
                     except Exception as e:
                         result = MatchResult(track=track, status=TransferStatus.FAILED, error=str(e))
                     result.context = f"Album: {album.name}"

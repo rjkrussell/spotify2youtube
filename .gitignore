@@ -137,7 +137,9 @@ celerybeat.pid
 # App credentials and state
 credentials.json
 state.json
+state_mock.json
 youtube_oauth.json
+youtube_oauth_mock.json
 .spotify_token_cache
 
 # Environments

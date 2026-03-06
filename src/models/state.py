@@ -9,7 +9,8 @@ import threading
 from src.models.library import SpotifyLibrary
 
 DATA_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-STATE_PATH = os.path.join(DATA_DIR, "state.json")
+_MOCK_MODE = os.environ.get("YOUTUBE_MOCK") == "1"
+STATE_PATH = os.path.join(DATA_DIR, "state_mock.json" if _MOCK_MODE else "state.json")
 
 
 class StateManager:

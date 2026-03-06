@@ -61,12 +61,18 @@ class TrackMatcher:
         self.yt = youtube_service
         self._last_request = 0.0
 
-    def match_track(self, track: Track) -> MatchResult:
-        """Match a single track. Returns a MatchResult."""
+    def match_track(self, track: Track, album_name: str = "") -> MatchResult:
+        """Match a single track. Returns a MatchResult.
+
+        If *album_name* is provided the search query is augmented with the
+        album name so YouTube results are biased toward the correct release.
+        """
+        first_artist = track.artists[0] if track.artists else ""
+        base_query = f"{track.name} {first_artist}"
+
         # Manual preference => skip to ambiguous
         if track.matching_pref == MatchingPreference.MANUAL:
-            first_artist = track.artists[0] if track.artists else ""
-            candidates = self._search_with_rate_limit(f"{track.name} {first_artist}")
+            candidates = self._search_with_rate_limit(base_query)
             return MatchResult(
                 track=track,
                 status=TransferStatus.AMBIGUOUS,
@@ -75,9 +81,8 @@ class TrackMatcher:
 
         threshold = self.EXACT_THRESHOLD if track.matching_pref == MatchingPreference.STRICT else self.FUZZY_THRESHOLD
 
-        # Step 1: Exact search
-        first_artist = track.artists[0] if track.artists else ""
-        query = f"{track.name} {first_artist}"
+        # Step 1: Exact search (include album name when available)
+        query = f"{base_query} {album_name}".strip() if album_name else base_query
         results = self._search_with_rate_limit(query)
         best, score = self._score_results(track, results)
 
@@ -98,7 +103,8 @@ class TrackMatcher:
         if track.matching_pref != MatchingPreference.STRICT:
             cleaned_name = clean_query(track.name)
             cleaned_artist = clean_query(first_artist) if first_artist else ""
-            fuzzy_query = f"{cleaned_name} {cleaned_artist}"
+            cleaned_album = clean_query(album_name) if album_name else ""
+            fuzzy_query = f"{cleaned_name} {cleaned_artist} {cleaned_album}".strip()
 
             if fuzzy_query != query:
                 results2 = self._search_with_rate_limit(fuzzy_query)
